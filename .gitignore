@@ -1,3 +1,10 @@
+bin
+obj
+*.suo
+*.user
+packages
+.vs
+
 target
 .idea
 *.iml
