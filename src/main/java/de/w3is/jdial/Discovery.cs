@@ -1,103 +1,75 @@
-/*
- * Copyright (C) 2018 Simon Weis
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+﻿using de.w3is.jdial.model;
+using de.w3is.jdial.protocol;
+using de.w3is.jdial.protocol.model;
+using NLog;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
-package de.w3is.jdial;
+namespace de.w3is.jdial
+{
+    public class Discovery
+    {
+        private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
+        private readonly ProtocolFactory protocolFactory;
 
-import de.w3is.jdial.model.DialServer;
-import de.w3is.jdial.protocol.ProtocolFactory;
-import de.w3is.jdial.protocol.ProtocolFactoryImpl;
-import de.w3is.jdial.protocol.model.DeviceDescriptor;
+        public Discovery(ProtocolFactory protocolFactory) {
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-/**
- * Discovery can be used to find dial servers in the local network
- *
- * @author Simon Weis
- */
-public class Discovery {
-
-    private static final Logger LOGGER = Logger.getLogger(Discovery.class.getName());
-    private final ProtocolFactory protocolFactory;
-
-    public Discovery(ProtocolFactory protocolFactory) {
-
-        this.protocolFactory = protocolFactory;
-    }
-
-    public Discovery() {
-        this(new ProtocolFactoryImpl(false));
-    }
-
-    /**
-     * The discover method returns all servers in the local network that support
-     * discovery via udp msearch and support the upnp device descriptor.
-     *
-     * IOExceptions are not thrown to the user of this method. Instead an empty list
-     * will be returned.
-     *
-     * @return Returns a list of discovered servers.
-     */
-    public List<DialServer> discover() {
-
-        List<DialServer> dialServers;
-
-        try {
-
-            dialServers = protocolFactory.createMSearch().sendAndReceive();
-
-        } catch (IOException e) {
-
-            LOGGER.log(Level.WARNING, "IOException while discovering devices:", e);
-            return Collections.emptyList();
+            this.protocolFactory = protocolFactory;
         }
 
-        List<DialServer> devicesToRemove = new ArrayList<>();
+        public Discovery() : this(new ProtocolFactoryImpl(false)) { }
 
-        for (DialServer device : dialServers) {
+        /**
+            * The discover method returns all servers in the local network that support
+            * discovery via udp msearch and support the upnp device descriptor.
+            *
+            * IOExceptions are not thrown to the user of this method. Instead an empty list
+            * will be returned.
+            *
+            * @return Returns a list of discovered servers.
+            */
+        public IEnumerable<DialServer> discover() {
+
+            IEnumerable<DialServer> dialServers;
 
             try {
 
-                DeviceDescriptor descriptor
-                        = protocolFactory.createDeviceDescriptorResource().getDescriptor(device.getDeviceDescriptorUrl());
-
-                if (descriptor != null) {
-
-                    device.setFriendlyName(descriptor.getFriendlyName());
-                    device.setApplicationResourceUrl(descriptor.getApplicationResourceUrl());
-                } else {
-
-                    devicesToRemove.add(device);
-                }
+                dialServers = protocolFactory.createMSearch().sendAndReceive();
 
             } catch (IOException e) {
 
-                devicesToRemove.add(device);
-                LOGGER.log(Level.WARNING, "IOException while reading device descriptor " + device.getDeviceDescriptorUrl(), e);
+                LOGGER.Log(LogLevel.Warn, "IOException while discovering devices:", e);
+                return new List<DialServer>(0);
             }
+
+            List<DialServer> devicesToRemove = new List<DialServer>();
+
+            foreach (DialServer device in dialServers) {
+
+                try {
+
+                    DeviceDescriptor descriptor
+                            = protocolFactory.createDeviceDescriptorResource().getDescriptor(device.getDeviceDescriptorUrl());
+
+                    if (descriptor != null) {
+
+                        device.setFriendlyName(descriptor.getFriendlyName());
+                        device.setApplicationResourceUrl(descriptor.getApplicationResourceUrl());
+                    } else {
+
+                        devicesToRemove.Add(device);
+                    }
+
+                } catch (IOException e) {
+
+                    devicesToRemove.Add(device);
+                    LOGGER.Log(LogLevel.Warn, "IOException while reading device descriptor " + device.getDeviceDescriptorUrl(), e);
+                }
+            }
+            
+            return dialServers.Except(devicesToRemove);
         }
-
-        dialServers.removeAll(devicesToRemove);
-
-        return dialServers;
     }
 }

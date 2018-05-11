@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,18 +15,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.protocol.model;
+using System;
 
-import lombok.Data;
+namespace de.w3is.jdial.protocol.model {
+    public class DeviceDescriptor {
 
-import java.net.URL;
+        private String friendlyName;
+        private Uri applicationResourceUrl;
 
-/**
- * @author Simon Weis
- */
-@Data
-public class DeviceDescriptor {
+        public string getFriendlyName() => friendlyName;
 
-    private String friendlyName;
-    private URL applicationResourceUrl;
+        internal void setFriendlyName(string v) => friendlyName = v;
+
+        public Uri getApplicationResourceUrl() => applicationResourceUrl;
+
+        internal void setApplicationResourceUrl(Uri uri) => applicationResourceUrl = uri;
+    }
 }

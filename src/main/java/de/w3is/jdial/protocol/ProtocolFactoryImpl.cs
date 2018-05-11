@@ -1,63 +1,40 @@
-/*
- * Copyright (C) 2018 Simon Weis
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
 
-package de.w3is.jdial.protocol;
+namespace de.w3is.jdial.protocol
+{
+    class ProtocolFactoryImpl : ProtocolFactory
+    {
+        private bool legacyCompatibility;
+        private int httpClientReadTimeoutMs = 1500;
+        private int httpClientConnectionTimeoutMs = 1500;
+        private int socketTimeoutMs = 1500;
+        private int mSearchResponseDelay = 0;
 
-import lombok.Data;
+        public ProtocolFactoryImpl(bool legacyCompatibility) {
 
-import java.net.URL;
+            this.legacyCompatibility = legacyCompatibility;
+        }
+        
+        public MSearch createMSearch() {
 
-/**
- * @author Simon Weis
- */
-@Data
-public class ProtocolFactoryImpl implements ProtocolFactory {
+            return new MSearchImpl(mSearchResponseDelay, socketTimeoutMs);
+        }
+        
+        public DeviceDescriptorResource createDeviceDescriptorResource() {
 
-    private boolean legacyCompatibility;
-    private int httpClientReadTimeoutMs = 1500;
-    private int httpClientConnectionTimeoutMs = 1500;
-    private int socketTimeoutMs = 1500;
-    private int mSearchResponseDelay = 0;
+            return new DeviceDescriptorResourceImpl();
+        }
+        
+        public ApplicationResource createApplicationResource(String clientFriendlyName, Uri applicationResourceUrl) {
 
-    public ProtocolFactoryImpl(boolean legacyCompatibility) {
+            ApplicationResourceImpl applicationResource = new ApplicationResourceImpl(clientFriendlyName, applicationResourceUrl);
+            applicationResource.setSendQueryParameter(!legacyCompatibility);
+            applicationResource.setConnectionTimeout(httpClientConnectionTimeoutMs);
+            applicationResource.setReadTimeout(httpClientReadTimeoutMs);
 
-        this.legacyCompatibility = legacyCompatibility;
-    }
-
-    @Override
-    public MSearch createMSearch() {
-
-        return new MSearchImpl(mSearchResponseDelay, socketTimeoutMs);
-    }
-
-    @Override
-    public DeviceDescriptorResource createDeviceDescriptorResource() {
-
-        return new DeviceDescriptorResourceImpl();
-    }
-
-    @Override
-    public ApplicationResource createApplicationResource(String clientFriendlyName, URL applicationResourceUrl) {
-
-        ApplicationResourceImpl applicationResource = new ApplicationResourceImpl(clientFriendlyName, applicationResourceUrl);
-        applicationResource.setSendQueryParameter(!legacyCompatibility);
-        applicationResource.setConnectionTimeout(httpClientConnectionTimeoutMs);
-        applicationResource.setReadTimeout(httpClientReadTimeoutMs);
-
-        return applicationResource;
+            return applicationResource;
+        }
     }
 }

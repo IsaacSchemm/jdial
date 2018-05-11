@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,17 +15,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.protocol;
+using de.w3is.jdial.model;
+using System.Collections.Generic;
 
-import de.w3is.jdial.model.DialServer;
+namespace de.w3is.jdial.protocol {
+    public interface MSearch {
 
-import java.io.IOException;
-import java.util.List;
-
-/**
- * @author Simon Weis
- */
-public interface MSearch {
-
-    List<DialServer> sendAndReceive() throws IOException;
+        IEnumerable<DialServer> sendAndReceive();
+    }
 }

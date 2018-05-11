@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -14,49 +14,60 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+ 
+using System;
+using System.Xml;
 
-package de.w3is.jdial.model;
+namespace de.w3is.jdial.model {
+    public class Application {
 
-import lombok.Data;
-import org.w3c.dom.Node;
+        public static readonly String NETFLIX = "Netflix";
+        public static readonly String YOUTUBE = "YouTube";
+        public static readonly String AMAZON_INSTANT_VIDEO = "AmazonInstantVideo";
 
-import java.io.Serializable;
-import java.net.URL;
+        // The name of the application
+        private String name;
 
-/**
- * The Application class represents an app that can be
- * run on a first-screen device.
- *
- * For all reserved DIAL application names see
- * http://www.dial-multiscreen.org/dial-registry/namespace-database
- *
- * @author Simon Weis
- */
-@Data
-public class Application implements Serializable {
+        // The state of the application
+        private State state;
 
-    public static final String NETFLIX = "Netflix";
-    public static final String YOUTUBE = "YouTube";
-    public static final String AMAZON_INSTANT_VIDEO = "AmazonInstantVideo";
+        // True if the client is allowed to stop the app
+        private bool allowStop;
 
-    // The name of the application
-    private String name;
+        // The installUrl can be used to issue an installation of the app.
+        private Uri installUrl;
 
-    // The state of the application
-    private State state;
+        /*
+         * The url of a running instance.
+         * The installUrl is null when no instance is running.
+         */
+        private Uri instanceUrl;
 
-    // True if the client is allowed to stop the app
-    private boolean allowStop;
+        // Additional data defined by the app author.
+        private XmlNode additionalData;
 
-    // The installUrl can be used to issue an installation of the app.
-    private URL installUrl;
+        internal string getName() => this.name;
 
-    /*
-     * The url of a running instance.
-     * The installUrl is null when no instance is running.
-     */
-    private URL instanceUrl;
+        internal void setName(string v) => this.name = v;
 
-    // Additional data defined by the app author.
-    private Node additionalData;
+        internal State getState() => this.state;
+
+        internal void setState(State state) => this.state = state;
+
+        internal bool isAllowStop() => allowStop;
+
+        internal void setAllowStop(bool v) => this.allowStop = v;
+
+        internal Uri getInstallUrl() => installUrl;
+
+        internal void setInstallUrl(Uri uri) => this.installUrl = uri;
+
+        internal Uri getInstanceUrl() => instanceUrl;
+
+        internal void setInstanceUrl(Uri uri) => this.installUrl = uri;
+
+        internal XmlNode getAdditionalData() => additionalData;
+
+        internal void setAdditionalData(XmlNode xmlNode) => this.additionalData = xmlNode;
+    }
 }

@@ -1,120 +1,118 @@
-/*
- * Copyright (C) 2018 Simon Weis
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
 
-package de.w3is.jdial.protocol;
+namespace de.w3is.jdial.protocol
+{
+    public class URLBuilder
+    {
 
-import java.net.MalformedURLException;
-import java.net.URL;
+        private static readonly String PATH_SEPARATOR = "/";
+        private static readonly String QUERY_SEPARATOR = "&";
+        private static readonly String QUERY_KEY_VALUE_SEPARATOR = "=";
+        private static readonly String PATH_QUERY_SEPARATOR = "?";
+        private static readonly String PATH_QUERY_SPLITTER = "\\?";
 
-/**
- * @author Simon Weis
- */
-class URLBuilder {
+        private String _protocol = "http";
+        private String _host = "localhost";
+        private int _port = 80;
 
-    private static final String PATH_SEPARATOR = "/";
-    private static final String QUERY_SEPARATOR = "&";
-    private static final String QUERY_KEY_VALUE_SEPARATOR = "=";
-    private static final String PATH_QUERY_SEPARATOR = "?";
-    private static final String PATH_QUERY_SPLITTER = "\\?";
+        private StringBuilder _paths = new StringBuilder();
+        private StringBuilder _query = new StringBuilder();
 
-    private String protocol = "http";
-    private String host = "localhost";
-    private int port = 80;
+        private URLBuilder() { }
 
-    private StringBuilder paths = new StringBuilder();
-    private StringBuilder query = new StringBuilder();
+        public static URLBuilder of(Uri url)
+        {
 
-    private URLBuilder() {}
+            URLBuilder urlBuilder = new URLBuilder()
+                    .protocol(url.Scheme)
+                    .host(url.Host)
+                    .port(url.Port)
+                    .path(url.AbsolutePath);
 
-    public static URLBuilder of(URL url) {
+            if (url.Query != null)
+            {
+                String[] queryParts = url.Query.Split(new[] { PATH_QUERY_SPLITTER }, System.StringSplitOptions.None);
 
-        URLBuilder urlBuilder = new URLBuilder()
-                .protocol(url.getProtocol())
-                .host(url.getHost())
-                .port(url.getPort())
-                .path(url.getPath());
+                foreach (String part in queryParts)
+                {
 
-        if (url.getQuery() != null) {
-            String[] queryParts = url.getQuery().split(PATH_QUERY_SPLITTER);
-
-            for (String part : queryParts) {
-
-                urlBuilder.query(part);
+                    urlBuilder.query(part);
+                }
             }
+
+            return urlBuilder;
         }
 
-        return urlBuilder;
-    }
-
-    URLBuilder protocol(String protocol) {
-        this.protocol = protocol;
-        return this;
-    }
-
-    private URLBuilder host(String host) {
-        this.host = host;
-        return this;
-    }
-
-    private URLBuilder port(int port) {
-        this.port = port;
-        return this;
-    }
-
-    URLBuilder path(String path) {
-
-        if (paths.length() != 0) {
-            this.paths.append(PATH_SEPARATOR);
+        URLBuilder protocol(String protocol)
+        {
+            this._protocol = protocol;
+            return this;
         }
 
-        this.paths.append(path);
-        return this;
-    }
+        private URLBuilder host(String host)
+        {
+            this._host = host;
+            return this;
+        }
 
-    void query(String key, String value) {
+        private URLBuilder port(int port)
+        {
+            this._port = port;
+            return this;
+        }
 
-        appendQueryOrPathSeparator();
+        public URLBuilder path(String path)
+        {
 
-        this.query.append(key).append(QUERY_KEY_VALUE_SEPARATOR).append(value);
+            if (_paths.Length != 0)
+            {
+                this._paths.Append(PATH_SEPARATOR);
+            }
 
-    }
+            this._paths.Append(path);
+            return this;
+        }
 
-    void query(String queryPart) {
+        public void query(String key, String value)
+        {
 
-        appendQueryOrPathSeparator();
+            appendQueryOrPathSeparator();
 
-        this.query.append(QUERY_SEPARATOR).append(queryPart);
-    }
+            this._query.Append(key).Append(QUERY_KEY_VALUE_SEPARATOR).Append(value);
 
-    URL build() throws MalformedURLException {
+        }
 
-        String joinedPath = paths.toString() + query.toString();
+        public void query(String queryPart)
+        {
 
-        return new URL(protocol, host, port, joinedPath);
-    }
+            appendQueryOrPathSeparator();
 
-    private void appendQueryOrPathSeparator() {
+            this._query.Append(QUERY_SEPARATOR).Append(queryPart);
+        }
 
-        if (this.query.length() == 0) {
+        public Uri build()
+        {
 
-            this.query.append(PATH_QUERY_SEPARATOR);
-        } else {
+            String joinedPath = _paths.ToString() + _query.ToString();
 
-            this.query.append(QUERY_SEPARATOR);
+            return new UriBuilder(_protocol, _host, _port, joinedPath).Uri;
+        }
+
+        private void appendQueryOrPathSeparator()
+        {
+
+            if (this._query.Length == 0)
+            {
+
+                this._query.Append(PATH_QUERY_SEPARATOR);
+            }
+            else
+            {
+
+                this._query.Append(QUERY_SEPARATOR);
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,175 +15,165 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.protocol;
+using de.w3is.jdial.model;
+using NLog;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 
-import de.w3is.jdial.model.DialServer;
+namespace de.w3is.jdial.protocol {
+    class MSearchImpl : MSearch {
+        private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.*;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+        private const String MULTICAST_IP = "239.255.255.250";
+        private const int MULTICAST_PORT = 1900;
 
-/**
- * @author Simon Weis
- */
-class MSearchImpl implements MSearch {
+        private const String SEARCH_TARGET_HEADER_VALUE = "urn:dial-multiscreen-org:service:dial:1";
+        private const String SEARCH_TARGET_HEADER = "ST";
+        private const String LOCATION_HEADER = "LOCATION";
+        private const String USN_HEADER = "USN";
+        private const String WAKEUP_HEADER = "WAKEUP";
+        private const String SERVER_HEADER = "SERVER";
+        private const String WOL_MAC = "MAC";
+        private const String WOL_TIMEOUT = "TIMEOUT";
 
-    private static final Logger LOGGER = Logger.getLogger(MSearchImpl.class.getName());
+        private readonly String msearchRequest;
+        private readonly int socketTimeoutMs;
 
-    private static final String MULTICAST_IP = "239.255.255.250";
-    private static final int MULTICAST_PORT = 1900;
+        internal MSearchImpl(int responseDelay, int socketTimeoutMs) {
 
-    private static final String SEARCH_TARGET_HEADER_VALUE = "urn:dial-multiscreen-org:service:dial:1";
-    private static final String SEARCH_TARGET_HEADER = "ST";
-    private static final String LOCATION_HEADER = "LOCATION";
-    private static final String USN_HEADER = "USN";
-    private static final String WAKEUP_HEADER = "WAKEUP";
-    private static final String SERVER_HEADER = "SERVER";
-    private static final String WOL_MAC = "MAC";
-    private static final String WOL_TIMEOUT = "TIMEOUT";
+            this.msearchRequest = "M-SEARCH * HTTP/1.1\r\n" +
+                    "HOST: " + MULTICAST_IP + ":" + MULTICAST_PORT + "\r\n" +
+                    "MAN: \"ssdp:discover\"\r\n" +
+                    "MX: " + responseDelay + "\r\n" +
+                    SEARCH_TARGET_HEADER + ": " + SEARCH_TARGET_HEADER_VALUE + "\r\n" +
+                    "USER-AGENT: OS/version product/version\r\n";
 
-    private final String msearchRequest;
-    private final int socketTimeoutMs;
+            this.socketTimeoutMs = socketTimeoutMs;
+        }
+        
+        public IEnumerable<DialServer> sendAndReceive() {
+            
+            byte[] requestBuffer = Encoding.UTF8.GetBytes(msearchRequest);
 
-    MSearchImpl(int responseDelay, int socketTimeoutMs) {
+            UdpClient udpClient = new UdpClient();
+            udpClient.Client.SendTimeout = socketTimeoutMs;
+            udpClient.Client.ReceiveTimeout = socketTimeoutMs;
+            udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
 
-        this.msearchRequest = "M-SEARCH * HTTP/1.1\r\n" +
-                "HOST: " + MULTICAST_IP + ":" + MULTICAST_PORT + "\r\n" +
-                "MAN: \"ssdp:discover\"\r\n" +
-                "MX: " + responseDelay + "\r\n" +
-                SEARCH_TARGET_HEADER + ": " + SEARCH_TARGET_HEADER_VALUE + "\r\n" +
-                "USER-AGENT: OS/version product/version\r\n";
+            LOGGER.Log(LogLevel.Debug, "Send M-SEARCH request");
+            udpClient.Send(requestBuffer, 0, MULTICAST_IP, MULTICAST_PORT);
 
-        this.socketTimeoutMs = socketTimeoutMs;
-    }
+            Dictionary<String, DialServer> discoveredDevicesByNames = new Dictionary<String, DialServer>();
 
-    @Override
-    public List<DialServer> sendAndReceive() throws IOException {
+            try {
+                while (true) {
+                    
+                    IPEndPoint remoteEP = null;
+                    byte[] responseBuffer = udpClient.Receive(ref remoteEP);
 
-        InetAddress inetAddress = InetAddress.getByName(MULTICAST_IP);
+                    DialServer dialServer = toServer(responseBuffer);
 
-        byte[] requestBuffer = msearchRequest.getBytes(StandardCharsets.UTF_8);
+                    if (dialServer != null) {
+                        if (!discoveredDevicesByNames.ContainsKey(dialServer.getUniqueServiceName())) {
+                            LOGGER.Log(LogLevel.Debug, "Found device: " + dialServer.ToString());
+                            discoveredDevicesByNames.Add(dialServer.getUniqueServiceName(), dialServer);
+                        }
+                    }
 
-        DatagramPacket requestPacket = new DatagramPacket(requestBuffer, requestBuffer.length, inetAddress, MULTICAST_PORT);
+                }
+            } catch (SocketException e) {
 
-        MulticastSocket socket = new MulticastSocket(MULTICAST_PORT);
-        socket.setReuseAddress(true);
-        socket.setSoTimeout(socketTimeoutMs);
-        socket.joinGroup(inetAddress);
+                LOGGER.Log(LogLevel.Trace, "Socket timed out: ", e);
+            }
 
-        LOGGER.log(Level.FINE, "Send M-SEARCH request");
-        socket.send(requestPacket);
+            return discoveredDevicesByNames.Values;
+        }
 
-        Map<String, DialServer> discoveredDevicesByNames = new HashMap<>();
+        private DialServer toServer(byte[] packet) {
 
-        try {
-            while (true) {
+            String data = Encoding.UTF8.GetString(packet);
 
-                byte[] responseBuffer = new byte[1024];
-                DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
-                socket.receive(responsePacket);
+            if (!data.Contains(SEARCH_TARGET_HEADER_VALUE)) {
 
-                DialServer dialServer = toServer(responsePacket);
+                LOGGER.Log(LogLevel.Trace, "Ignore response for unrelated search target: " + data);
+                return null;
+            }
 
-                if (dialServer != null) {
-                    if (!discoveredDevicesByNames.containsKey(dialServer.getUniqueServiceName())) {
-                        LOGGER.log(Level.FINE, "Found device: " + dialServer.toString());
-                        discoveredDevicesByNames.put(dialServer.getUniqueServiceName(), dialServer);
+            String[] dataRows = data.Split('\n');
+            DialServer dialServer = new DialServer();
+
+            foreach (String row in dataRows) {
+
+                String[] headerParts = row.Split(new[] { ": " }, StringSplitOptions.None);
+
+                if (headerParts.Length == 2) {
+
+                    String headerName = headerParts[0].ToUpperInvariant();
+
+                    switch (headerName) {
+                        case LOCATION_HEADER:
+                            parseDeviceDescriptorUrl(dialServer, headerParts[1]);
+                            break;
+                        case USN_HEADER:
+                            dialServer.setUniqueServiceName(headerParts[1]);
+                            break;
+                        case WAKEUP_HEADER:
+                            parseWolHeader(dialServer, headerParts[1]);
+                            break;
+                        case SERVER_HEADER:
+                            dialServer.setServerDescription(headerParts[1]);
+                            break;
+                        default:
+                            LOGGER.Log(LogLevel.Debug, "Ignoring unknown header: " + headerName);
+                            break;
                     }
                 }
-
             }
-        } catch (SocketTimeoutException e) {
 
-            LOGGER.log(Level.FINER, "Socket timed out: ", e);
-        }
+            if (dialServer.getDeviceDescriptorUrl() != null
+                    && dialServer.getUniqueServiceName() != null && dialServer.getUniqueServiceName().Length > 0) {
 
-        return new ArrayList<>(discoveredDevicesByNames.values());
-    }
+                return dialServer;
+            } else {
 
-    private DialServer toServer(DatagramPacket packet) {
-
-        String data = new String(packet.getData(), StandardCharsets.UTF_8);
-
-        if (!data.contains(SEARCH_TARGET_HEADER_VALUE)) {
-
-            LOGGER.log(Level.FINER, "Ignore response for unrelated search target: " + data);
-            return null;
-        }
-
-        String[] dataRows = data.split("\n");
-        DialServer dialServer = new DialServer();
-
-        for (String row : dataRows) {
-
-            String[] headerParts = row.split(": ");
-
-            if (headerParts.length == 2) {
-
-                String headerName = headerParts[0].toUpperCase();
-
-                switch (headerName) {
-                    case LOCATION_HEADER:
-                        parseDeviceDescriptorUrl(dialServer, headerParts[1]);
-                        break;
-                    case USN_HEADER:
-                        dialServer.setUniqueServiceName(headerParts[1]);
-                        break;
-                    case WAKEUP_HEADER:
-                        parseWolHeader(dialServer, headerParts[1]);
-                        break;
-                    case SERVER_HEADER:
-                        dialServer.setServerDescription(headerParts[1]);
-                        break;
-                    default:
-                        LOGGER.log(Level.FINE, "Ignoring unknown header: " + headerName);
-                }
+                LOGGER.Log(LogLevel.Trace, "Ignore package with incomplete data: " + data);
+                return null;
             }
         }
 
-        if (dialServer.getDeviceDescriptorUrl() != null
-                && dialServer.getUniqueServiceName() != null && dialServer.getUniqueServiceName().length() > 0) {
-
-            return dialServer;
-        } else {
-
-            LOGGER.log(Level.FINER, "Ignore package with incomplete data: " + data);
-            return null;
+        private void parseDeviceDescriptorUrl(DialServer dialServer, String headerPart) {
+            try {
+                dialServer.setDeviceDescriptorUrl(new Uri(headerPart));
+            } catch (UriFormatException e) {
+                LOGGER.Log(LogLevel.Warn, "Server provided malformed device descriptor url: ", e);
+            }
         }
-    }
 
-    private void parseDeviceDescriptorUrl(DialServer dialServer, String headerPart) {
-        try {
-            dialServer.setDeviceDescriptorUrl(new URL(headerPart));
-        } catch (MalformedURLException e) {
-            LOGGER.log(Level.WARNING, "Server provided malformed device descriptor url: ", e);
-        }
-    }
+        private void parseWolHeader(DialServer dialServer, String headerValue) {
 
-    private void parseWolHeader(DialServer dialServer, String headerValue) {
+            String[] wolParts = headerValue.Split(';');
 
-        String[] wolParts = headerValue.split(";");
+            foreach (String wolPart in wolParts) {
 
-        for (String wolPart : wolParts) {
+                String[] wolHeader = wolPart.Split('=');
 
-            String[] wolHeader = wolPart.split("=");
+                if (wolHeader.Length == 2) {
 
-            if (wolHeader.length == 2) {
-
-                switch (wolHeader[0].toUpperCase()) {
-                    case WOL_MAC:
-                        dialServer.setWakeOnLanMAC(wolHeader[1]);
-                        dialServer.setWakeOnLanSupport(true);
-                        break;
-                    case WOL_TIMEOUT:
-                        dialServer.setWakeOnLanTimeout(Integer.parseInt(wolHeader[1]));
-                        break;
-                    default:
-                        LOGGER.log(Level.FINE, "Ignore unknown wol header: " + wolHeader[0]);
+                    switch (wolHeader[0].ToUpperInvariant()) {
+                        case WOL_MAC:
+                            dialServer.setWakeOnLanMAC(wolHeader[1]);
+                            dialServer.setWakeOnLanSupport(true);
+                            break;
+                        case WOL_TIMEOUT:
+                            dialServer.setWakeOnLanTimeout(int.Parse(wolHeader[1]));
+                            break;
+                        default:
+                            LOGGER.Log(LogLevel.Debug, "Ignore unknown wol header: " + wolHeader[0]);
+                            break;
+                    }
                 }
             }
         }

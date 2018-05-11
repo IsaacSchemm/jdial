@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,304 +15,289 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.protocol;
+using de.w3is.jdial.model;
+using de.w3is.jdial.protocol.model;
+using NLog;
+using System;
+using System.IO;
+using System.Net;
+using System.Xml;
 
-import de.w3is.jdial.model.Application;
-import de.w3is.jdial.model.DialContent;
-import de.w3is.jdial.model.State;
-import de.w3is.jdial.protocol.model.ApplicationResourceException;
-import lombok.Data;
-import org.w3c.dom.*;
-import org.xml.sax.SAXException;
+namespace de.w3is.jdial.protocol {
+    public class ApplicationResourceImpl : ApplicationResource {
+        private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
+        private static readonly String APPLICATION_DIAL_VERSION_QUERY = "clientDialVersion=2.1";
+        private static readonly String CLIENT_FRIENDLY_NAME_QUERY = "friendlyName";
+        private static readonly String CONTENT_LENGTH_HEADER = "Content-Length";
+        private static readonly String CONTENT_TYPE_HEADER = "Content-Type";
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import static de.w3is.jdial.protocol.XMLUtil.getTextFromSub;
-
-/**
- * @author Simon Weis
- */
-@Data
-class ApplicationResourceImpl implements ApplicationResource {
-
-    private static final Logger LOGGER = Logger.getLogger(ApplicationResourceImpl.class.getName());
-    private static final String APPLICATION_DIAL_VERSION_QUERY = "clientDialVersion=2.1";
-    private static final String CLIENT_FRIENDLY_NAME_QUERY = "friendlyName";
-    private static final String CONTENT_LENGTH_HEADER = "Content-Length";
-    private static final String CONTENT_TYPE_HEADER = "Content-Type";
-
-    private static final DialContent NO_CONTENT = new DialContent() {
-        @Override
-        public String getContentType() {
-            return null;
-        }
-
-        @Override
-        public byte[] getData() {
-            return null;
-        }
-    };
-
-    private final String clientFriendlyName;
-    private final URL rootUrl;
-    private boolean sendQueryParameter;
-    private Integer connectionTimeout;
-    private Integer readTimeout;
-
-    ApplicationResourceImpl(String clientFriendlyName, URL rootUrl) {
-
-        this.clientFriendlyName = clientFriendlyName;
-        this.rootUrl = rootUrl;
-        this.sendQueryParameter = true;
-    }
-
-    @Override
-    public Application getApplication(String applicationName) throws IOException {
-
-        URLBuilder applicationUrl = URLBuilder.of(rootUrl).path(applicationName);
-
-        if (sendQueryParameter) {
-
-            applicationUrl.query(APPLICATION_DIAL_VERSION_QUERY);
-        }
-
-        HttpURLConnection httpUrlConnection = (HttpURLConnection) applicationUrl.build().openConnection();
-        addTimeoutParameter(httpUrlConnection);
-        httpUrlConnection.setDoInput(true);
-
-        if (httpUrlConnection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-
-            LOGGER.log(Level.FINE, "Application not found: ", httpUrlConnection.getResponseCode());
-            return null;
-        }
-
-        try (InputStream inputStream = httpUrlConnection.getInputStream()) {
-
-            Document serviceDocument = getServiceDocument(inputStream);
-
-            Application application = new Application();
-            application.setName(getTextFromSub(serviceDocument, "name"));
-            application.setInstanceUrl(getInstanceUrl(serviceDocument, application.getName()));
-            application.setAllowStop(getIsAllowStopFromOption(serviceDocument));
-            application.setAdditionalData(extractAdditionalData(serviceDocument));
-
-            extractState(serviceDocument, application);
-
-            return application;
-
-        } catch (ParserConfigurationException | SAXException | ApplicationResourceException e) {
-
-            LOGGER.log(Level.WARNING, "Can't parse body xml", e);
-            return null;
-        }
-    }
-
-    @Override
-    public URL startApplication(String applicationName) throws IOException, ApplicationResourceException {
-
-        return startApplication(applicationName, NO_CONTENT);
-    }
-
-    @Override
-    public URL startApplication(String applicationName, DialContent dialContent) throws IOException, ApplicationResourceException {
-
-        URLBuilder applicationUrl = URLBuilder.of(rootUrl).path(applicationName);
-
-        if (clientFriendlyName != null && sendQueryParameter) {
-            applicationUrl.query(CLIENT_FRIENDLY_NAME_QUERY, clientFriendlyName);
-        }
-
-        HttpURLConnection httpURLConnection = (HttpURLConnection) applicationUrl.build().openConnection();
-        httpURLConnection.setRequestMethod("POST");
-        httpURLConnection.setDoOutput(true);
-
-        addTimeoutParameter(httpURLConnection);
-
-        if (dialContent.getData() == null) {
-
-            httpURLConnection.setRequestProperty(CONTENT_LENGTH_HEADER, "0");
-
-            // HttpURLConnection will not send headers if the outputStream not getting opened.
-            httpURLConnection.getOutputStream().close();
-        } else {
-
-            httpURLConnection.setRequestProperty(CONTENT_LENGTH_HEADER, String.valueOf(dialContent.getData().length));
-            httpURLConnection.setRequestProperty(CONTENT_TYPE_HEADER, dialContent.getContentType());
-
-            try (OutputStream outputStream = httpURLConnection.getOutputStream()) {
-                outputStream.write(dialContent.getData());
-            }
-        }
-
-        int code = httpURLConnection.getResponseCode();
-
-        if (code == HttpURLConnection.HTTP_OK || code == HttpURLConnection.HTTP_CREATED) {
-
-            String instanceLocation = httpURLConnection.getHeaderField("LOCATION");
-
-            if (instanceLocation != null) {
-
-                return new URL(instanceLocation);
-            } else {
-
+        private static readonly DialContent NO_CONTENT = new DialNoContent();
+        
+        private class DialNoContent : DialContent {
+            public String getContentType() {
                 return null;
             }
-        } else {
+            
+            public byte[] getData() {
+                return null;
+            }
+        };
 
-            throw new ApplicationResourceException("Could not start application. Status: " + code);
+        private readonly String clientFriendlyName;
+
+        private readonly Uri rootUrl;
+        private bool sendQueryParameter;
+        private int? connectionTimeout;
+        private int? readTimeout;
+
+        internal void setSendQueryParameter(bool v) => sendQueryParameter = v;
+
+        internal void setConnectionTimeout(int httpClientConnectionTimeoutMs) => connectionTimeout = httpClientConnectionTimeoutMs;
+
+        internal void setReadTimeout(int httpClientReadTimeoutMs) => readTimeout = httpClientReadTimeoutMs;
+
+        internal ApplicationResourceImpl(String clientFriendlyName, Uri rootUrl) {
+
+            this.clientFriendlyName = clientFriendlyName;
+            this.rootUrl = rootUrl;
+            this.sendQueryParameter = true;
         }
-    }
+        
+        public Application getApplication(String applicationName) {
 
-    @Override
-    public void stopApplication(URL instanceUrl) throws IOException, ApplicationResourceException {
+            URLBuilder applicationUrl = URLBuilder.of(rootUrl).path(applicationName);
 
-        HttpURLConnection httpURLConnection = (HttpURLConnection) instanceUrl.openConnection();
-        addTimeoutParameter(httpURLConnection);
-        httpURLConnection.setRequestMethod("DELETE");
+            if (sendQueryParameter) {
 
-        if (httpURLConnection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-            throw new ApplicationResourceException("Could not stop the application. Status: " +
-                    httpURLConnection.getResponseCode());
+                applicationUrl.query(APPLICATION_DIAL_VERSION_QUERY);
+            }
+
+            HttpWebRequest httpUrlConnection = WebRequest.CreateHttp(applicationUrl.build());
+            addTimeoutParameter(httpUrlConnection);
+
+            HttpWebResponse response = (HttpWebResponse)httpUrlConnection.GetResponse();
+            if (response.StatusCode != HttpStatusCode.OK) {
+
+                LOGGER.Log(LogLevel.Trace, "Application not found: ", response.StatusCode);
+                return null;
+            }
+
+            using (Stream inputStream = response.GetResponseStream()) try {
+
+                XmlDocument serviceDocument = getServiceDocument(inputStream);
+
+                Application application = new Application();
+                application.setName(serviceDocument.getTextFromSub("name"));
+                application.setInstanceUrl(getInstanceUrl(serviceDocument, application.getName()));
+                application.setAllowStop(getIsAllowStopFromOption(serviceDocument));
+                application.setAdditionalData(extractAdditionalData(serviceDocument));
+
+                extractState(serviceDocument, application);
+
+                return application;
+
+            } catch (XmlException e) {
+
+                LOGGER.Log(LogLevel.Warn, "Can't parse body xml", e);
+                return null;
+            }
         }
-    }
+            
+        public Uri startApplication(String applicationName) {
 
-    @Override
-    public void hideApplication(URL instanceURL) throws IOException, ApplicationResourceException {
-
-        URL hidingUrl = URLBuilder.of(instanceURL).path("hide").build();
-        HttpURLConnection httpURLConnection = (HttpURLConnection) hidingUrl.openConnection();
-        addTimeoutParameter(httpURLConnection);
-        httpURLConnection.setRequestMethod("POST");
-
-        if (httpURLConnection.getResponseCode() != HttpURLConnection.HTTP_OK) {
-            throw new ApplicationResourceException("Could not hide the application. Status: " +
-                    httpURLConnection.getResponseCode());
+            return startApplication(applicationName, NO_CONTENT);
         }
-    }
+            
+        public Uri startApplication(String applicationName, DialContent dialContent) {
 
-    private Document getServiceDocument(InputStream inputStream) throws IOException, ParserConfigurationException, SAXException {
+            URLBuilder applicationUrl = URLBuilder.of(rootUrl).path(applicationName);
 
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
-        Document document = documentBuilder.parse(inputStream);
+            if (clientFriendlyName != null && sendQueryParameter) {
+                applicationUrl.query(CLIENT_FRIENDLY_NAME_QUERY, clientFriendlyName);
+            }
 
-        document.getDocumentElement().normalize();
+            HttpWebRequest httpURLConnection = WebRequest.CreateHttp(applicationUrl.build());
+            httpURLConnection.Method = ("POST");
+            httpURLConnection.AllowAutoRedirect = false;
 
-        return document;
-    }
+            addTimeoutParameter(httpURLConnection);
 
-    private Node extractAdditionalData(Document document) {
+            if (dialContent.getData() == null) {
 
-        NodeList nodes = document.getElementsByTagName("additionalData");
+                httpURLConnection.ContentLength = 0;
 
-        if (nodes.getLength() >= 1) {
+                // HttpURLConnection will not send headers if the outputStream not getting opened.
+                using (Stream outputStream = httpURLConnection.GetRequestStream()) { }
+            } else {
 
-            return nodes.item(0);
+                httpURLConnection.ContentLength = dialContent.getData().Length;
+                httpURLConnection.ContentType = dialContent.getContentType();
+                
+                using (Stream outputStream = httpURLConnection.GetRequestStream()) {
+                    outputStream.Write(dialContent.getData(), 0, dialContent.getData().Length);
+                }
+            }
+
+            HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse();
+            HttpStatusCode code = response.StatusCode;
+
+            if (code == HttpStatusCode.OK || code == HttpStatusCode.Created) {
+
+                String instanceLocation = httpURLConnection.Headers["Location"];
+
+                if (instanceLocation != null) {
+
+                    return new Uri(instanceLocation);
+                } else {
+
+                    return null;
+                }
+            } else {
+
+                throw new ApplicationResourceException("Could not start application. Status: " + code);
+            }
+        }
+        
+        public void stopApplication(Uri instanceUrl) {
+
+            HttpWebRequest httpURLConnection = WebRequest.CreateHttp(instanceUrl);
+            addTimeoutParameter(httpURLConnection);
+            httpURLConnection.Method = ("DELETE");
+
+            HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse();
+            if (response.StatusCode != HttpStatusCode.OK) {
+                throw new ApplicationResourceException("Could not stop the application. Status: " +
+                        response.StatusCode);
+            }
         }
 
-        return null;
-    }
+        public void hideApplication(Uri instanceURL) {
 
-    private boolean getIsAllowStopFromOption(Document document) {
+            Uri hidingUrl = URLBuilder.of(instanceURL).path("hide").build();
+            HttpWebRequest httpURLConnection = WebRequest.CreateHttp(hidingUrl);
+            addTimeoutParameter(httpURLConnection);
+            httpURLConnection.Method = ("POST");
 
-        NodeList nodes = document.getElementsByTagName("options");
-
-        if (nodes.getLength() < 1) {
-            return false;
+            HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse();
+            if (response.StatusCode != HttpStatusCode.OK) {
+                throw new ApplicationResourceException("Could not hide the application. Status: " +
+                        response.StatusCode);
+            }
         }
 
-        NamedNodeMap optionAttributes = nodes.item(0).getAttributes();
-        Node allowStop = optionAttributes.getNamedItem("allowStop");
+        private XmlDocument getServiceDocument(Stream inputStream) {
+            
+            XmlDocument document = new XmlDocument();
+            document.Load(inputStream);
 
-        return allowStop != null && Boolean.parseBoolean(allowStop.getTextContent());
-    }
+            document.DocumentElement.Normalize();
 
-    private URL getInstanceUrl(Document document, String applicationName) throws MalformedURLException, ApplicationResourceException {
-
-        NodeList nodes = document.getElementsByTagName("link");
-
-        if (nodes.getLength() < 1) {
-            throw new ApplicationResourceException("Document has no link element");
+            return document;
         }
 
-        NamedNodeMap linkAttributes = nodes.item(0).getAttributes();
-        Node href = linkAttributes.getNamedItem("href");
-        Node rel = linkAttributes.getNamedItem("rel");
+        private XmlNode extractAdditionalData(XmlDocument document) {
 
-        if (rel == null || href == null || !rel.getTextContent().equals("run")) {
+            XmlNodeList nodes = document.GetElementsByTagName("additionalData");
 
-            throw new ApplicationResourceException("Unknown link type on service");
-        }
+            if (nodes.Count >= 1) {
 
-        return URLBuilder.of(rootUrl).path(applicationName).path(href.getTextContent()).build();
-    }
+                return nodes.Item(0);
+            }
 
-    private void extractState(Document document, Application application) throws ApplicationResourceException, MalformedURLException {
-
-        String stateText = getTextFromSub(document, "state");
-
-        State state = mapToState(stateText);
-        application.setState(state);
-
-        if (state == State.INSTALLABLE) {
-            application.setInstallUrl(getInstallUrl(stateText));
-        }
-    }
-
-    private URL getInstallUrl(String state) throws MalformedURLException {
-
-        String[] stateParts = state.split("=");
-
-        if (stateParts.length < 2) {
             return null;
         }
 
-        return new URL(stateParts[1]);
-    }
+        private bool getIsAllowStopFromOption(XmlDocument document) {
 
-    private State mapToState(String value) throws ApplicationResourceException {
+            XmlNodeList nodes = document.GetElementsByTagName("options");
 
-        if (value == null) {
-            throw new ApplicationResourceException("App exists but has no state");
+            if (nodes.Count < 1) {
+                return false;
+            }
+
+            XmlNamedNodeMap optionAttributes = nodes.Item(0).Attributes;
+            XmlNode allowStop = optionAttributes.GetNamedItem("allowStop");
+
+            return allowStop != null && bool.Parse(allowStop.InnerText);
         }
 
-        String lowercaseStatus = value.toLowerCase();
-        if (lowercaseStatus.startsWith("installable")) {
+        private Uri getInstanceUrl(XmlDocument document, String applicationName) {
 
-            return State.INSTALLABLE;
+            XmlNodeList nodes = document.GetElementsByTagName("link");
+
+            if (nodes.Count < 1) {
+                throw new ApplicationResourceException("Document has no link element");
+            }
+
+            XmlNamedNodeMap linkAttributes = nodes.Item(0).Attributes;
+            XmlNode href = linkAttributes.GetNamedItem("href");
+            XmlNode rel = linkAttributes.GetNamedItem("rel");
+
+            if (rel == null || href == null || !rel.InnerText.Equals("run")) {
+
+                throw new ApplicationResourceException("Unknown link type on service");
+            }
+
+            return URLBuilder.of(rootUrl).path(applicationName).path(href.InnerText).build();
         }
 
-        switch (lowercaseStatus) {
+        private void extractState(XmlDocument document, Application application) {
 
-            case "running":
-                return State.RUNNING;
-            case "stopped":
-                return State.STOPPED;
-            case "hidden":
-                return State.HIDDEN;
-            default:
-                throw new ApplicationResourceException("Unknown state: " + value);
-        }
-    }
+            String stateText = document.getTextFromSub("state");
 
-    private void addTimeoutParameter(HttpURLConnection httpUrlConnection) {
+            State state = mapToState(stateText);
+            application.setState(state);
 
-        if (connectionTimeout != null) {
-            httpUrlConnection.setConnectTimeout(connectionTimeout);
+            if (state == State.INSTALLABLE) {
+                application.setInstallUrl(getInstallUrl(stateText));
+            }
         }
 
-        if (readTimeout != null) {
-            httpUrlConnection.setReadTimeout(readTimeout);
+        private Uri getInstallUrl(String state) {
+
+            String[] stateParts = state.Split('=');
+
+            if (stateParts.Length < 2) {
+                return null;
+            }
+
+            return new Uri(stateParts[1]);
+        }
+
+        private State mapToState(String value) {
+
+            if (value == null) {
+                throw new ApplicationResourceException("App exists but has no state");
+            }
+
+            String lowercaseStatus = value.ToLowerInvariant();
+            if (lowercaseStatus.StartsWith("installable")) {
+
+                return State.INSTALLABLE;
+            }
+
+            switch (lowercaseStatus) {
+
+                case "running":
+                    return State.RUNNING;
+                case "stopped":
+                    return State.STOPPED;
+                case "hidden":
+                    return State.HIDDEN;
+                default:
+                    throw new ApplicationResourceException("Unknown state: " + value);
+            }
+        }
+
+        private void addTimeoutParameter(HttpWebRequest httpUrlConnection) {
+
+            if (connectionTimeout != null) {
+                httpUrlConnection.Timeout = (connectionTimeout).Value;
+            }
+
+            if (readTimeout != null) {
+                httpUrlConnection.ReadWriteTimeout = (readTimeout).Value;
+            }
         }
     }
 }

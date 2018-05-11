@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,86 +15,74 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.protocol;
+using de.w3is.jdial.protocol.model;
+using NLog;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Text;
+using System.Xml;
 
-import de.w3is.jdial.protocol.model.DeviceDescriptor;
-import org.w3c.dom.Document;
-import org.xml.sax.SAXException;
+namespace de.w3is.jdial.protocol {
+    class DeviceDescriptorResourceImpl : DeviceDescriptorResource {
+        private static readonly Logger LOGGER = LogManager.GetCurrentClassLogger();
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+        private static readonly String APPLICATION_URL_HEADER = "Application-URL";
+        
+        public DeviceDescriptor getDescriptor(Uri deviceDescriptorLocation) {
 
-import static de.w3is.jdial.protocol.XMLUtil.getTextFromSub;
+            if (deviceDescriptorLocation == null) {
 
-/**
- * @author Simon Weis
- */
-class DeviceDescriptorResourceImpl implements DeviceDescriptorResource {
+                throw new ArgumentException("Device descriptor can't be null");
+            }
 
-    private static final Logger LOGGER = Logger.getLogger(DeviceDescriptorResourceImpl.class.getName());
+            if (!deviceDescriptorLocation.Scheme.Equals("http")) {
 
-    private static final String APPLICATION_URL_HEADER = "Application-URL";
+                LOGGER.Log(LogLevel.Warn, "Only http is supported for device descriptor resolution");
+                return null;
+            }
 
-    @Override
-    public DeviceDescriptor getDescriptor(URL deviceDescriptorLocation) throws IOException {
+            HttpWebRequest connection = WebRequest.CreateHttp(deviceDescriptorLocation);
 
-        if (deviceDescriptorLocation == null) {
+            HttpWebResponse response = (HttpWebResponse)connection.GetResponse();
+            if (response.StatusCode != HttpStatusCode.OK) {
 
-            throw new IllegalArgumentException("Device descriptor can't be null");
+                LOGGER.Log(LogLevel.Warn, "Could not get device descriptor: " + response.StatusCode);
+                return null;
+            }
+
+            String applicationUrl = connection.Headers[APPLICATION_URL_HEADER];
+
+            if (applicationUrl == null) {
+
+                LOGGER.Log(LogLevel.Warn, "Server didn't return applicationUrl");
+                return null;
+            }
+
+            DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
+            deviceDescriptor.setApplicationResourceUrl(new Uri(applicationUrl));
+
+            readInfoFromBody(response, deviceDescriptor);
+
+            return deviceDescriptor;
         }
 
-        if (!deviceDescriptorLocation.getProtocol().equals("http")) {
+        private void readInfoFromBody(HttpWebResponse connection, DeviceDescriptor deviceDescriptor) {
 
-            LOGGER.log(Level.WARNING, "Only http is supported for device descriptor resolution");
-            return null;
-        }
+            using (Stream inputStream = connection.GetResponseStream()) try {
 
-        HttpURLConnection connection = (HttpURLConnection) deviceDescriptorLocation.openConnection();
+                XmlDocument bodyDocument = new XmlDocument();
+                bodyDocument.Load(inputStream);
 
-        if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                bodyDocument.DocumentElement.Normalize();
 
-            LOGGER.log(Level.WARNING, "Could not get device descriptor: " + connection.getResponseCode());
-            return null;
-        }
+                deviceDescriptor.setFriendlyName(bodyDocument.getTextFromSub("friendlyName"));
 
-        String applicationUrl = connection.getHeaderField(APPLICATION_URL_HEADER);
+            } catch (XmlException e) {
 
-        if (applicationUrl == null) {
-
-            LOGGER.log(Level.WARNING, "Server didn't return applicationUrl");
-            return null;
-        }
-
-        DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
-        deviceDescriptor.setApplicationResourceUrl(new URL(applicationUrl));
-
-        readInfoFromBody(connection, deviceDescriptor);
-
-        return deviceDescriptor;
-    }
-
-    private void readInfoFromBody(HttpURLConnection connection, DeviceDescriptor deviceDescriptor) throws IOException {
-
-        try (InputStream inputStream = connection.getInputStream()) {
-
-            DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
-            Document bodyDocument = documentBuilder.parse(inputStream);
-
-            bodyDocument.getDocumentElement().normalize();
-
-            deviceDescriptor.setFriendlyName(getTextFromSub(bodyDocument, "friendlyName"));
-
-        } catch (ParserConfigurationException | SAXException e) {
-
-            LOGGER.log(Level.WARNING, "Error while parsing device descriptor:", e);
+                LOGGER.Log(LogLevel.Warn, "Error while parsing device descriptor:", e);
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,27 +15,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.protocol;
+using System;
 
-import java.io.IOException;
-import java.net.URL;
+using de.w3is.jdial.model;
 
-import de.w3is.jdial.model.Application;
-import de.w3is.jdial.model.DialContent;
-import de.w3is.jdial.protocol.model.ApplicationResourceException;
+namespace de.w3is.jdial.protocol {
+    public interface ApplicationResource {
 
-/**
- * @author Simon Weis
- */
-public interface ApplicationResource {
+        Application getApplication(String applicationName);
 
-    Application getApplication(String applicationName) throws IOException;
+        Uri startApplication(String applicationName);
 
-    URL startApplication(String applicationName) throws IOException, ApplicationResourceException;
+        Uri startApplication(String applicationName, DialContent dialContent);
 
-    URL startApplication(String applicationName, DialContent dialContent) throws IOException, ApplicationResourceException;
+        void stopApplication(Uri instanceUrl);
 
-    void stopApplication(URL instanceUrl) throws IOException, ApplicationResourceException;
-
-    void hideApplication(URL instanceURL) throws IOException, ApplicationResourceException;
+        void hideApplication(Uri instanceURL);
+    }
 }

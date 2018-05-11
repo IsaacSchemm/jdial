@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,14 +15,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.protocol.model;
+using System;
 
-/**
- * @author Simon Weis
- */
-public class ApplicationResourceException extends Exception {
+namespace de.w3is.jdial.protocol.model {
+    public class ApplicationResourceException : Exception {
 
-    public ApplicationResourceException(String message) {
-        super(message);
+        public ApplicationResourceException(String message) : base(message) { }
     }
 }

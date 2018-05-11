@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,17 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.model;
+using System;
 
-/**
- * Implement this interface to pass additional data
- * to the first-screen device app in an start request.
- *
- * @author Simon Weis
- */
-public interface DialContent {
+namespace de.w3is.jdial.model {
+    public interface DialContent
+    {
 
-    String getContentType();
+        String getContentType();
 
-    byte[] getData();
+        byte[] getData();
+    }
 }

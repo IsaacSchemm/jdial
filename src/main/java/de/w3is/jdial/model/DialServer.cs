@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,42 +15,55 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.model;
+using System;
 
-import lombok.Data;
+namespace de.w3is.jdial.model {
+    public class DialServer {
 
-import java.io.Serializable;
-import java.net.URL;
+        // The friendly name is only set if the device exposes it via upnp device descriptor
+        private String friendlyName;
 
-/**
- * The representation of a remote dial server
- *
- * @author Simon Weis
- */
-@Data
-public class DialServer implements Serializable {
+        // The url to the application rest resource
+        private Uri applicationResourceUrl;
 
-    // The friendly name is only set if the device exposes it via upnp device descriptor
-    private String friendlyName;
+        // A unique identifier of the device
+        private String uniqueServiceName;
 
-    // The url to the application rest resource
-    private URL applicationResourceUrl;
+        // The url to the upnp device descriptor
+        private Uri deviceDescriptorUrl;
 
-    // A unique identifier of the device
-    private String uniqueServiceName;
+        // Set if the server supports wol
+        private bool wakeOnLanSupport;
 
-    // The url to the upnp device descriptor
-    private URL deviceDescriptorUrl;
+        // The MAC address to wake up the device
+        private String wakeOnLanMAC;
 
-    // Set if the server supports wol
-    private boolean wakeOnLanSupport;
+        // The wake on lan timeout.
+        private int wakeOnLanTimeout;
 
-    // The MAC address to wake up the device
-    private String wakeOnLanMAC;
+        // A technical description string of the server
+        private String serverDescription;
 
-    // The wake on lan timeout.
-    private Integer wakeOnLanTimeout;
+        internal void setFriendlyName(string p) => friendlyName = p;
 
-    // A technical description string of the server
-    private String serverDescription;
+        internal Uri getApplicationResourceUrl() => applicationResourceUrl;
+
+        internal void setApplicationResourceUrl(Uri p) => applicationResourceUrl = p;
+
+        internal string getUniqueServiceName() => uniqueServiceName;
+
+        internal void setUniqueServiceName(string v) => uniqueServiceName = v;
+
+        internal Uri getDeviceDescriptorUrl() => deviceDescriptorUrl;
+
+        internal void setDeviceDescriptorUrl(Uri p) => deviceDescriptorUrl = p;
+
+        internal void setWakeOnLanMAC(string v) => wakeOnLanMAC = v;
+
+        internal void setWakeOnLanSupport(bool v) => wakeOnLanSupport = v;
+
+        internal void setWakeOnLanTimeout(int v) => wakeOnLanTimeout = v;
+
+        internal void setServerDescription(string v) => serverDescription = v;
+    }
 }

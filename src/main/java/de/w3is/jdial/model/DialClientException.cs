@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2018 Simon Weis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -15,18 +15,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package de.w3is.jdial.model;
+using System;
 
-/**
- * @author Simon Weis
- */
-public class DialClientException extends Exception {
+namespace de.w3is.jdial.model {
+    public class DialClientException : Exception {
 
-    public DialClientException(Throwable cause) {
-        super(cause);
-    }
+        public DialClientException(Exception cause) : base(cause.Message, cause) { }
 
-    public DialClientException(String s) {
-        super(s);
+        public DialClientException(String s) : base(s) { }
     }
 }
