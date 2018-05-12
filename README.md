@@ -1,8 +1,8 @@
 # JDial
 
-[![CircleCI](https://circleci.com/gh/detached/jdial/tree/master.svg?style=svg)](https://circleci.com/gh/detached/jdial/tree/master)
+This is a C# port of JDial. I haven't tested it and I'm probably not going to use it, but maybe it will help someone else.
 
-JDial is an plain java implementation of the Discovery and Launch (DIAL) protocol version 2.1 defined by Netflix and YouTube.
+----------------------------------------
 
 DIAL allows second screen devices (smartphone, laptop, ...) to discover server instances in the local network and 
 launch applications on a first screen device (smart TV).
@@ -12,33 +12,12 @@ and [dial-multiscreen.org](http://www.dial-multiscreen.org).
 
 A list of reserved application names can also be found on the [dial-multiscreen.org](http://www.dial-multiscreen.org/dial-registry/namespace-database) site.
 
-JDial has no dependencies to any library and can therefore integrated in every program and app.
-
-# Dependency declaration
-
-You can find the latest releaese in the [central repository](https://search.maven.org/#search%7Cga%7C1%7Cg%3A%22de.w3is%22%20a%3A%22jdial%22).
-
-## Maven
-
-```
-<dependency>
-    <groupId>de.w3is</groupId>
-    <artifactId>jdial</artifactId>
-    <version>1.3</version>
-</dependency>
-```
-## Gradle
-
-```
-compile 'de.w3is:jdial:1.3'
-```
-
 # Usage
 
 ## Discover
 
 ```
-List<DialServer> devices = new Discovery().discover();
+IEnumerable<DialServer> devices = new Discovery().discover();
 ```
 
 ## Creat a DialClientConnection
@@ -71,21 +50,19 @@ tv.stopApplication(youtube);
 ## Implement application vendor protocol
 ```
 
- DialContent content = new DialContent() {
+ class MyCustomContent : DialContent {
  
-     @Override
      public String getContentType() {
          return "application/json; encoding=UTF-8";
      }
 
-     @Override
      public byte[] getData() {
-          return "{}".getBytes(Charset.forName("UTF-8"));
+          return Encoding.UTF8.GetBytes("{}");
      }
  };
 
 
-myTv.startApplication(youtube, content)
+myTv.startApplication(youtube, new MyCustomContent())
 ```
 
 ## Legacy support
@@ -102,4 +79,4 @@ DialClient dialClient = new DialClient(factory);
 
 ## Logging
 
-Logging is done via java util logging.
+Logging is done via NLog.
