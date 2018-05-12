@@ -75,30 +75,29 @@ namespace de.w3is.jdial.protocol {
             HttpWebRequest httpUrlConnection = WebRequest.CreateHttp(applicationUrl.build());
             addTimeoutParameter(httpUrlConnection);
 
-            HttpWebResponse response = (HttpWebResponse)httpUrlConnection.GetResponse();
-            if (response.StatusCode != HttpStatusCode.OK) {
+            try {
+                using (HttpWebResponse response = (HttpWebResponse)httpUrlConnection.GetResponse())
+                using (Stream inputStream = response.GetResponseStream()) try {
 
-                LOGGER.Log(LogLevel.Trace, "Application not found: ", response.StatusCode);
-                return null;
-            }
+                    XmlDocument serviceDocument = getServiceDocument(inputStream);
 
-            using (Stream inputStream = response.GetResponseStream()) try {
+                    Application application = new Application();
+                    application.setName(serviceDocument.getTextFromSub("name"));
+                    application.setInstanceUrl(getInstanceUrl(serviceDocument, application.getName()));
+                    application.setAllowStop(getIsAllowStopFromOption(serviceDocument));
+                    application.setAdditionalData(extractAdditionalData(serviceDocument));
 
-                XmlDocument serviceDocument = getServiceDocument(inputStream);
+                    extractState(serviceDocument, application);
 
-                Application application = new Application();
-                application.setName(serviceDocument.getTextFromSub("name"));
-                application.setInstanceUrl(getInstanceUrl(serviceDocument, application.getName()));
-                application.setAllowStop(getIsAllowStopFromOption(serviceDocument));
-                application.setAdditionalData(extractAdditionalData(serviceDocument));
+                    return application;
 
-                extractState(serviceDocument, application);
+                } catch (XmlException e) {
 
-                return application;
-
-            } catch (XmlException e) {
-
-                LOGGER.Log(LogLevel.Warn, "Can't parse body xml", e);
+                    LOGGER.Log(LogLevel.Warn, "Can't parse body xml", e);
+                    return null;
+                }
+            } catch (WebException ex) {
+                LOGGER.Log(LogLevel.Trace, "Application not found: " + (ex.Response as HttpWebResponse)?.StatusCode);
                 return null;
             }
         }
@@ -138,23 +137,21 @@ namespace de.w3is.jdial.protocol {
                 }
             }
 
-            HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse();
-            HttpStatusCode code = response.StatusCode;
+            try {
+                using (HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse()) {
+                    String instanceLocation = httpURLConnection.Headers["Location"];
 
-            if (code == HttpStatusCode.OK || code == HttpStatusCode.Created) {
+                    if (instanceLocation != null) {
 
-                String instanceLocation = httpURLConnection.Headers["Location"];
+                        return new Uri(instanceLocation);
+                    } else {
 
-                if (instanceLocation != null) {
-
-                    return new Uri(instanceLocation);
-                } else {
-
-                    return null;
+                        return null;
+                    }
                 }
-            } else {
+            } catch (WebException ex) {
 
-                throw new ApplicationResourceException("Could not start application. Status: " + code);
+                throw new ApplicationResourceException("Could not start application. Status: " + (ex.Response as HttpWebResponse)?.StatusCode);
             }
         }
         
@@ -164,10 +161,11 @@ namespace de.w3is.jdial.protocol {
             addTimeoutParameter(httpURLConnection);
             httpURLConnection.Method = ("DELETE");
 
-            HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse();
-            if (response.StatusCode != HttpStatusCode.OK) {
+            try {
+                using (HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse()) { }
+            } catch (WebException ex) {
                 throw new ApplicationResourceException("Could not stop the application. Status: " +
-                        response.StatusCode);
+                        (ex.Response as HttpWebResponse)?.StatusCode);
             }
         }
 
@@ -178,10 +176,11 @@ namespace de.w3is.jdial.protocol {
             addTimeoutParameter(httpURLConnection);
             httpURLConnection.Method = ("POST");
 
-            HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse();
-            if (response.StatusCode != HttpStatusCode.OK) {
+            try {
+                using (HttpWebResponse response = (HttpWebResponse)httpURLConnection.GetResponse()) { }
+            } catch (WebException ex) {
                 throw new ApplicationResourceException("Could not hide the application. Status: " +
-                        response.StatusCode);
+                        (ex.Response as HttpWebResponse)?.StatusCode);
             }
         }
 

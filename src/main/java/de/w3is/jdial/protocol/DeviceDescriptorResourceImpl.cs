@@ -45,27 +45,27 @@ namespace de.w3is.jdial.protocol {
 
             HttpWebRequest connection = WebRequest.CreateHttp(deviceDescriptorLocation);
 
-            HttpWebResponse response = (HttpWebResponse)connection.GetResponse();
-            if (response.StatusCode != HttpStatusCode.OK) {
+            try {
+                using (HttpWebResponse response = (HttpWebResponse)connection.GetResponse()) {
+                    String applicationUrl = connection.Headers[APPLICATION_URL_HEADER];
 
-                LOGGER.Log(LogLevel.Warn, "Could not get device descriptor: " + response.StatusCode);
+                    if (applicationUrl == null) {
+
+                        LOGGER.Log(LogLevel.Warn, "Server didn't return applicationUrl");
+                        return null;
+                    }
+
+                    DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
+                    deviceDescriptor.setApplicationResourceUrl(new Uri(applicationUrl));
+
+                    readInfoFromBody(response, deviceDescriptor);
+
+                    return deviceDescriptor;
+                }
+            } catch (WebException ex) {
+                LOGGER.Log(LogLevel.Warn, "Could not get device descriptor: " + (ex.Response as HttpWebResponse)?.StatusCode);
                 return null;
             }
-
-            String applicationUrl = connection.Headers[APPLICATION_URL_HEADER];
-
-            if (applicationUrl == null) {
-
-                LOGGER.Log(LogLevel.Warn, "Server didn't return applicationUrl");
-                return null;
-            }
-
-            DeviceDescriptor deviceDescriptor = new DeviceDescriptor();
-            deviceDescriptor.setApplicationResourceUrl(new Uri(applicationUrl));
-
-            readInfoFromBody(response, deviceDescriptor);
-
-            return deviceDescriptor;
         }
 
         private void readInfoFromBody(HttpWebResponse connection, DeviceDescriptor deviceDescriptor) {
